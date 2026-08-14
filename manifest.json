@@ -2,7 +2,7 @@
   "name": "VOID ORACLE",
   "short_name": "VOID",
   "description": "VOID ORACLE Research and Intelligence Terminal",
-  "start_url": "/index.html",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
