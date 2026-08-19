@@ -524,8 +524,79 @@ function analyze(c){if(c.length<200)return null;const close=c.map(x=>x.c),i=c.le
 
 function buildPlan(a){if(!a||!a.dir)return null;const entry=a.close,sl=a.dir==="LONG"?a.lo-a.a[a.i]*.30:a.hi+a.a[a.i]*.30;const risk=Math.abs(entry-sl);if(!risk||risk/entry<0.001)return null;const rr=Math.max(.1,Number($('inRR')?.value)||2);const tp1=a.dir==="LONG"?entry+risk*1.5:entry-risk*1.5;const tp2=a.dir==="LONG"?entry+risk*rr:entry-risk*rr;const bal=Math.max(0,Number($('inBal')?.value)||0),rp=Math.max(0,Number($('inRisk')?.value)||0);const riskAmt=bal*rp/100,size=riskAmt/risk;const spread=Math.max(0,Number($('inSpread')?.value)||0);const slip=spread*0.5;const comm=entry*(CFG.comm/100);const friction=spread+slip+comm;const netRisk=risk+friction;const netR=netRisk>0?((a.dir==="LONG"?tp2-entry:entry-tp2)-friction)/netRisk:0;return{dir:a.dir,entry,sl,tp1,tp2,risk,riskAmt,size,rr,netR,friction,spread,slip,comm,score:a.score,regime:a.regime,atr:a.a[a.i],time:a.close||Date.now()}}
 
-function execState(a){const ct=canTrade();if(!ct.ok)return{state:"LOCKED",cls:"wait",checks:[ct.reason]};if(!a)return{state:"WAIT",cls:"wait",checks:["Loading candles..."]};const mkt=S.market||"OFFLINE";if(mkt!=="LIVE")return{state:"WAIT",cls:"wait",checks:["Feed: "+mkt]};const margin=Math.abs(a.ls-a.ss);if(!a.dir)return{state:"SCAN",cls:"wait",checks:["L "+a.ls+" / S "+a.ss]};const plan=buildPlan(a);const drift=plan?Math.abs((curPrice()||plan.entry)-plan.entry)/(a.a[a.i]||1):Infinity;const checks=[];checks.push("Score: "+a.score+"/100");checks.push("Margin: "+margin);checks.push("Drift: "+drift.toFixed(2)+" ATR");if(a.discount)checks.push("Discount zone ok");if(a.absorption)checks.push("Absorption ok");if(S.champ){if(a.regime==="RANGE")checks.push("Warning RANGE - Chris skips");if(a.regime==="TRANSITION")checks.push("Warning TRANSITION - wait");if(!a.discount)checks.push("Warning Not in discount zone");if(!a.absorption)checks.push("Warning No absorption yet");}let mtfOk=true;if(S.useMtf){const b4=S.mtf["4h"]||"&mdash;",b1=S.mtf["1h"]||"&mdash;";mtfOk=a.dir==="LONG"?b4==="BULL"&&b1==="BULL":a.dir==="SHORT"?b4==="BEAR"&&b1==="BEAR":false;checks.push("MTF: "+(mtfOk?"Aligned":"Conflict"));}let champOk=true;if(S.champ){champOk=a.discount&&a.absorption&&(a.regime.startsWith("TREND")||a.regime==="TREND BULL"||a.regime==="TREND BEAR")&&!a.regime.includes("RANGE")&&!a.regime.includes("TRANSITION");}if(a.dir&&a.score>=CFG.minScore&&margin>=CFG.minMargin&&drift<=CFG.driftMax&&mtfOk&&champOk){return{state:"EXECUTE "+a.dir,cls:a.dir==="LONG"?"long":"short",checks};}if(S.champ&&a.dir&&a.score>=60&&!champOk){return{state:"FORMING - "+a.dir,cls:"wait",checks};}if(a.dir&&a.score>=60){return{state:"ARMED",cls:"armed",checks};}return{state:"FORMING",cls:"wait",checks:["L "+a.ls+" / S "+a.ss]};}
+function execState(a){
+const ct=canTrade();
+if(!ct.ok)return{state:"LOCKED",cls:"wait",checks:[ct.reason]};
+if(!a)return{state:"WAIT",cls:"wait",checks:["Loading candles..."]};
 
+const mkt=S.market||"OFFLINE";
+if(mkt!=="LIVE")return{state:"WAIT",cls:"wait",checks:["Feed: "+mkt]};
+
+const margin=Math.abs(a.ls-a.ss);
+const plan=buildPlan(a);
+const drift=plan?Math.abs((curPrice()||plan.entry)-plan.entry)/(a.a[a.i]||1):Infinity;
+const checks=[];
+
+checks.push("Score: "+a.score+"/100");
+checks.push("Margin: "+margin);
+checks.push("Drift: "+drift.toFixed(2)+" ATR");
+checks.push("Regime: "+a.regime);
+
+if(a.discount)checks.push("Discount: OK");
+else checks.push("Discount: BLOCKED");
+
+if(a.absorption)checks.push("Absorption: OK");
+else checks.push("Absorption: BLOCKED");
+
+if(!a.dir){
+checks.push("Direction: NONE");
+if(a.ls<CFG.minScore&&a.ss<CFG.minScore)checks.push("Block: score below minimum");
+else if(Math.abs(a.ls-a.ss)<CFG.minMargin)checks.push("Block: margin below minimum");
+else checks.push("Block: directional threshold");
+return{state:"SCAN",cls:"wait",checks};
+}
+
+checks.push("Direction: "+a.dir);
+
+const scoreOk=a.score>=CFG.minScore;
+const marginOk=margin>=CFG.minMargin;
+const driftOk=drift<=CFG.driftMax;
+
+checks.push("Score gate: "+(scoreOk?"PASS":"FAIL"));
+checks.push("Margin gate: "+(marginOk?"PASS":"FAIL"));
+checks.push("Drift gate: "+(driftOk?"PASS":"FAIL"));
+
+let mtfOk=true;
+if(S.useMtf){
+const b4=S.mtf["4h"]||"—";
+const b1=S.mtf["1h"]||"—";
+mtfOk=a.dir==="LONG"?b4==="BULL"&&b1==="BULL":a.dir==="SHORT"?b4==="BEAR"&&b1==="BEAR":false;
+checks.push("MTF: "+(mtfOk?"PASS":"FAIL")+" ("+b1+" / "+b4+")");
+}else{
+checks.push("MTF: OFF");
+}
+
+let champOk=true;
+if(S.champ){
+const trendOk=a.regime.startsWith("TREND");
+champOk=!!(a.discount&&a.absorption&&trendOk);
+checks.push("CHAMP discount: "+(a.discount?"PASS":"FAIL"));
+checks.push("CHAMP absorption: "+(a.absorption?"PASS":"FAIL"));
+checks.push("CHAMP regime: "+(trendOk?"PASS":"FAIL"));
+}else{
+checks.push("CHAMP: OFF");
+}
+
+if(scoreOk&&marginOk&&driftOk&&mtfOk&&champOk){
+return{state:"EXECUTE "+a.dir,cls:a.dir==="LONG"?"long":"short",checks};
+}
+
+if(a.score>=60){
+return{state:"ARMED",cls:"armed",checks};
+}
+
+return{state:"FORMING",cls:"wait",checks};
+}
 function openPos(){const a=S.an,plan=buildPlan(a),ex=execState(a);if(!plan||!ex.state.startsWith("EXECUTE"))return;const fill=curPrice();if(!Number.isFinite(fill))return;const sd=Math.abs(fill-plan.sl);if(!sd)return;dailyReset();const p={id:"VOID-"+Date.now(),asset:S.asset,tf:S.tf,dir:plan.dir,entry:fill,sigEntry:plan.entry,sl:plan.sl,tp1:plan.tp1,tp2:plan.tp2,time:Date.now(),riskAmt:plan.riskAmt,size:plan.riskAmt/sd,sd,rr:plan.rr,netR:plan.netR,regime:plan.regime,score:plan.score,friction:plan.friction};S.pos=p;S.daily.trades++;savePos();saveDaily();renderAll();}
 function livePos(){const p=S.pos,price=curPrice();if(!p||!Number.isFinite(price))return null;const move=p.dir==="LONG"?price-p.entry:p.entry-price;const r=p.sd?move/p.sd:0;let trailMsg="";if(r>=1.0&&S.champ&&p.sl!==p.entry){trailMsg="Move SL to BE (+1R)";if(r>=2.0){const trailAmt=p.sd*0.5;trailMsg="Trail SL (+2R+)";}}return{move,r,pl:p.size*move,pct:p.entry?(move/p.entry)*100:0,dSL:p.dir==="LONG"?price-p.sl:p.sl-price,dTP:p.dir==="LONG"?p.tp2-price:price-p.tp2,status:Math.abs(r)<1e-6?"BE":r>0?"PROFIT":"LOSS",price,trailMsg}}
 function closePos(price,reason){const p=S.pos;if(!p||!Number.isFinite(price))return;dailyReset();const move=p.dir==="LONG"?price-p.entry:p.entry-price;const r=p.sd?move/p.sd:0;const result=r>1e-6?"WIN":r<-1e-6?"LOSS":"BE";S.journal.unshift({id:p.id,asset:p.asset,tf:p.tf,dir:p.dir,entry:p.entry,exit:price,pl:p.size*move,r:r,result,time:Date.now(),reason,regime:p.regime,score:p.score,netR:p.netR});S.journal=S.journal.slice(0,300);saveJ();S.daily.pl+=p.size*move;S.daily.r+=r;if(result==="WIN"){S.daily.wins++;S.daily.streak=Math.max(0,S.daily.streak+1);}else if(result==="LOSS"){S.daily.losses++;S.daily.streak=Math.min(0,S.daily.streak-1);}else{S.daily.be++;}saveDaily();S.pos=null;savePos();renderAll();}
@@ -538,19 +609,176 @@ async function fetchQuote(asset){const key=($('inKey')?.value||"").trim();if(!ke
 
 function cleanup(){clearInterval(S.timer);S.timer=null;clearInterval(S.radarTimer);S.radarTimer=null;if(S.ws){try{S.ws.onclose=null;S.ws.close();}catch{}S.ws=null;}S.c=[];S.live=null;S.liveAt=0;S.an=null;S.integ=null;S.market="OFFLINE";S.mtf={};}
 function integ(c,tf){let gaps=0,dupes=0,step=ivl(tf);for(let i=1;i<c.length;i++){const d=c[i].t-c[i-1].t;if(d<=0){dupes++;continue}if(d!==step)gaps++}const last=(c[c.length-1]||{}),closeT=last?last.t+step:0,age=last?Math.max(0,Date.now()-closeT):Infinity;return{ok:!gaps&&!dupes,age,ageOpen:last?Math.max(0,Date.now()-last.t):Infinity,bars:c.length,gaps,dupes}}
-function classify(){if(!S.c.length)return"OFFLINE";const age=S.integ?.age??Infinity,qAge=Number.isFinite(S.liveAt)?Date.now()-S.liveAt:Infinity,qFresh=isCrypto(S.asset)?qAge<=20000:qAge<=120000;return qFresh&&age<=CFG.fresh[S.asset]?"LIVE":age<=CFG.fresh[S.asset]*6?"DELAYED":"STALE"}
+function classify(){
+if(!S.c.length)return"OFFLINE";
+const age=S.integ?.age??Infinity;
+const qAge=Number.isFinite(S.liveAt)?Date.now()-S.liveAt:Infinity;
+const fresh=CFG.fresh[S.asset]??120000;
+if(isCrypto(S.asset)){
+const qFresh=qAge<=20000;
+return qFresh?"LIVE":qAge<=60000?"DELAYED":"STALE";
+}
+const quoteFresh=qAge<=180000;
+const candleFresh=age<=fresh;
+if(quoteFresh&&candleFresh)return"LIVE";
+if(age<=fresh*6)return"DELAYED";
+return"STALE";
+}
 function curPrice(){return Number.isFinite(S.live)?S.live:((S.c[S.c.length-1]||{}).c??null)}
 async function loadMTF(){if(!S.useMtf||!S.c.length)return;try{for(const tf of["1h","4h"]){const data=isCrypto(S.asset)?await fetchCrypto(S.asset,tf):isStock(S.asset)?await fetchStock(S.asset,tf):await fetchForex(S.asset,tf);S.mtf[tf]=mtfBias(data);}}catch(e){console.log("MTF",e);}}
 
-async function connect(){if(S.loading)return;S.loading=true;cleanup();try{if(!isCrypto(S.asset)&&!($('inKey')?.value||"").trim())throw new Error("Enter API key for Forex/Stocks");S.c=isCrypto(S.asset)?await fetchCrypto(S.asset,S.tf):isStock(S.asset)?await fetchStock(S.asset,S.tf):await fetchForex(S.asset,S.tf);S.live=(S.c[S.c.length-1]||{}).c??null;S.liveAt=Date.now();if(!isCrypto(S.asset))await fetchQuote(S.asset);S.integ=integ(S.c,S.tf);S.market=classify();S.an=analyze(S.c);await loadMTF();saveCandles();renderAll();if(isCrypto(S.asset))startWS();else S.timer=setInterval(async()=>{try{S.c=isStock(S.asset)?await fetchStock(S.asset,S.tf):await fetchForex(S.asset,S.tf);await fetchQuote(S.asset);S.integ=integ(S.c,S.tf);S.market=classify();S.an=analyze(S.c);saveCandles();renderAll();}catch(e){S.market="ERROR";renderAll();}},30000);}catch(e){const cached=loadCandles(S.asset,S.tf);if(cached){S.integ=integ(S.c,S.tf);S.market=classify();S.an=analyze(S.c);renderAll();}else{S.market="ERROR";renderAll();}}finally{S.loading=false;}}
-function startWS(){if(!isCrypto(S.asset)||S.ws)return;const w=new WebSocket("wss://stream.binance.com:9443/ws/"+S.asset.toLowerCase()+"@kline_"+S.tf);S.ws=w;w.onmessage=e=>{try{const k=JSON.parse(e.data).k;if(Number.isFinite(+k.c)){S.live=+k.c;S.liveAt=Date.now();}if(k.x){const last=S.c[S.c.length-1];if(last&&last.t===+k.t){last.o=+k.o;last.h=+k.h;last.l=+k.l;last.c=+k.c;last.v=+k.v;}else if(!last||+k.t>last.t){S.c.push({t:+k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c,v:+k.v});if(S.c.length>CFG.limit)S.c.shift();}S.integ=integ(S.c,S.tf);S.market=classify();S.an=analyze(S.c);saveCandles();renderAll();}}catch{}};w.onclose=()=>{S.ws=null;setTimeout(()=>{if(isCrypto(S.asset))startWS();},S.backoff);S.backoff=Math.min(S.backoff*2,30000);};w.onopen=()=>{S.backoff=2000;};}
+async function connect(){
+if(S.loading)return;
+S.loading=true;
+cleanup();
+S.lastError="";
+try{
+if(!isCrypto(S.asset)&&!($('inKey')?.value||"").trim())
+throw new Error("Enter API key for Forex/Stocks");
 
-let lastPrice=null;
+S.c=isCrypto(S.asset)
+?await fetchCrypto(S.asset,S.tf)
+:isStock(S.asset)
+?await fetchStock(S.asset,S.tf)
+:await fetchForex(S.asset,S.tf);
+
+S.live=(S.c[S.c.length-1]||{}).c??null;
+S.liveAt=Date.now();
+
+if(!isCrypto(S.asset))await fetchQuote(S.asset);
+
+S.integ=integ(S.c,S.tf);
+S.market=classify();
+S.an=analyze(S.c);
+
+await loadMTF();
+saveCandles();
+renderAll();
+
+if(isCrypto(S.asset))startWS();
+else S.timer=setInterval(async()=>{
+try{
+S.c=isStock(S.asset)
+?await fetchStock(S.asset,S.tf)
+:await fetchForex(S.asset,S.tf);
+await fetchQuote(S.asset);
+S.integ=integ(S.c,S.tf);
+S.market=classify();
+S.an=analyze(S.c);
+S.lastError="";
+saveCandles();
+renderAll();
+}catch(e){
+S.lastError=String(e?.message||e);
+S.market="ERROR";
+console.error("VOID ORACLE DATA ERROR:",e);
+renderAll();
+}},30000);
+
+}catch(e){
+S.lastError=String(e?.message||e);
+console.error("VOID ORACLE CONNECT ERROR:",e);
+
+const cached=loadCandles(S.asset,S.tf);
+
+if(cached){
+S.integ=integ(S.c,S.tf);
+S.market=classify();
+S.an=analyze(S.c);
+}else{
+S.market="ERROR";
+}
+
+renderAll();
+}finally{
+S.loading=false;
+}}
+function startWS(){
+if(!isCrypto(S.asset)||S.ws)return;
+
+const w=new WebSocket("wss://stream.binance.com:9443/ws/"+S.asset.toLowerCase()+"@kline_"+S.tf);
+S.ws=w;
+
+w.onmessage=e=>{
+try{
+const k=JSON.parse(e.data).k;
+
+if(Number.isFinite(+k.c)){
+S.live=+k.c;
+S.liveAt=Date.now();
+
+/* Reclassify immediately on every live tick. */
+if(S.c.length){
+S.integ=integ(S.c,S.tf);
+S.market=classify();
+}
+
+renderAll();
+}
+
+if(k.x){
+const last=S.c[S.c.length-1];
+
+if(last&&last.t===+k.t){
+last.o=+k.o;
+last.h=+k.h;
+last.l=+k.l;
+last.c=+k.c;
+last.v=+k.v;
+}
+else if(!last||+k.t>last.t){
+S.c.push({
+t:+k.t,
+o:+k.o,
+h:+k.h,
+l:+k.l,
+c:+k.c,
+v:+k.v
+});
+
+if(S.c.length>CFG.limit)S.c.shift();
+}
+
+S.integ=integ(S.c,S.tf);
+S.market=classify();
+S.an=analyze(S.c);
+
+saveCandles();
+renderAll();
+}
+}catch(err){
+console.error("VOID WS error:",err);
+}
+};
+
+w.onerror=()=>{
+try{w.close();}catch{}
+};
+
+w.onclose=()=>{
+S.ws=null;
+
+if(isCrypto(S.asset)){
+setTimeout(()=>{
+if(isCrypto(S.asset)&&!S.ws)startWS();
+},S.backoff);
+
+S.backoff=Math.min(S.backoff*2,30000);
+}
+};
+
+w.onopen=()=>{
+S.backoff=2000;
+S.market=S.c.length?"LIVE":"OFFLINE";
+S.integ=integ(S.c,S.tf);
+renderAll();
+};
+}
 function updateMotion(){
   const core=document.getElementById("signalCore");
   if(!core)return;
   const a=S.an;
-  if(!a){return;}
+  if(!a)return;
   const adx=a.d&&a.d.adx&&a.d.adx[a.i]?a.d.adx[a.i]:20;
   const atrPct=a.atp||0.5;
   const macdHist=Math.abs(a.m&&a.m.h&&a.m.h[a.i]?a.m.h[a.i]:0);
@@ -574,6 +802,7 @@ function updateMotion(){
   }
   bgPriceDir=dir==="LONG"?-1:dir==="SHORT"?1:0;
 }
+
 function renderAll(){try{const price=curPrice();const ex=execState(S.an);const plan=buildPlan(S.an);
 const pEl=$('corePrice');
 if(Number.isFinite(price)&&price!==lastPrice){
@@ -614,6 +843,14 @@ function renderDaily(){const panel=$('dailyPanel');if(!panel)return;if(!S.champ)
 function renderRadarBadge(){let hot=0;for(const sym in S.radar){const r=S.radar[sym];if(r&&r.ex&&r.ex.state.startsWith("EXECUTE")&&sym!==S.asset)hot++;}const pill=$('connPill');if(pill){const existing=pill.querySelector('.radar-dot');if(existing)existing.remove();if(hot>0){const dot=document.createElement('span');dot.className='radar-dot';dot.textContent=' '+hot;dot.style.cssText='background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:9px;margin-left:4px;font-weight:700';pill.appendChild(dot);}}}
 
 function renderQuant(){if(S.view!=="quant")return;const a=S.an;let html='';if(a){const d=a.decomp;html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px"><div class="liquid-cell"><div class="liquid-label">Trend</div><div class="liquid-value">'+d.trend+'/30</div><div class="liquid-sub">'+a.regime+'</div></div><div class="liquid-cell"><div class="liquid-label">Momentum</div><div class="liquid-value">'+d.mom+'/25</div><div class="liquid-sub">RSI '+fmt2(a.r[a.i])+'</div></div><div class="liquid-cell"><div class="liquid-label">Structure</div><div class="liquid-value">'+d.struct+'/25</div><div class="liquid-sub">'+(a.struct?a.struct.bos:"—")+'</div></div><div class="liquid-cell"><div class="liquid-label">Vol+OB</div><div class="liquid-value">'+d.volOb+'/20</div><div class="liquid-sub">'+(a.vol.ok?a.vol.ratio.toFixed(2)+"×":"N/A")+'</div></div><div class="liquid-cell"><div class="liquid-label">Long</div><div class="liquid-value">'+a.ls+'</div></div><div class="liquid-cell"><div class="liquid-label">Short</div><div class="liquid-value">'+a.ss+'</div></div></div><div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.15em;font-weight:700;margin-bottom:12px">Market State</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px"><div class="liquid-cell"><div class="liquid-label">Regime</div><div class="liquid-value">'+a.regime+'</div></div><div class="liquid-cell"><div class="liquid-label">ADX</div><div class="liquid-value">'+fmt2(a.d.adx[a.i])+'</div></div><div class="liquid-cell"><div class="liquid-label">ATR %</div><div class="liquid-value">'+a.atp.toFixed(3)+'%</div></div><div class="liquid-cell"><div class="liquid-label">RSI</div><div class="liquid-value">'+fmt2(a.r[a.i])+'</div></div><div class="liquid-cell"><div class="liquid-label">MACD</div><div class="liquid-value">'+(a.m.h[a.i]?a.m.h[a.i].toFixed(4):"—")+'</div></div><div class="liquid-cell"><div class="liquid-label">BB</div><div class="liquid-value">'+a.bbSqueeze+'</div></div></div>';}else{html+='<div style="color:var(--text-faint);text-align:center;padding:40px">No data. Connect to initialize.</div>';}
+const ex=execState(a);
+const gateChecks=ex.checks||[];
+html+='<div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.15em;font-weight:700;margin:20px 0 12px">Execution Gates</div>';
+html+='<div class="void-card" style="margin-bottom:20px">';
+html+='<div style="font-size:14px;font-weight:700;margin-bottom:10px">'+ex.state+'</div>';
+html+='<div style="display:grid;grid-template-columns:1fr;gap:6px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text-dim)">';
+html+=gateChecks.map(x=>'<div>'+x+'</div>').join("");
+html+='</div></div>';
 if(S.pos){const lp=livePos();html+='<div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.15em;font-weight:700;margin-bottom:12px">Live Position</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px"><div class="liquid-cell"><div class="liquid-label">Dir</div><div class="liquid-value">'+S.pos.dir+'</div></div><div class="liquid-cell"><div class="liquid-label">Entry</div><div class="liquid-value">'+fmt(S.pos.entry)+'</div></div><div class="liquid-cell"><div class="liquid-label">P/L</div><div class="liquid-value" style="color:'+(lp.pl>=0?'var(--green)':'var(--red)')+'">'+fmt$(lp.pl)+'</div></div><div class="liquid-cell"><div class="liquid-label">R</div><div class="liquid-value">'+fmtR(lp.r)+'</div></div><div class="liquid-cell"><div class="liquid-label">To SL</div><div class="liquid-value">'+fmt(lp.dSL)+'</div></div><div class="liquid-cell"><div class="liquid-label">To TP</div><div class="liquid-value">'+fmt(lp.dTP)+'</div></div></div>';}
 $('quantContent').innerHTML=html;}
 
@@ -1219,6 +1456,13 @@ function init(){
 }
 
 init();
+
+window.S=S;
+window.connect=connect;
+window.execState=execState;
+window.curPrice=curPrice;
+window.renderAll=renderAll;
+
 </script>
 
 <!-- === VOID ORACLE v7 AUDIO ENGINE === -->
