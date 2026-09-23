@@ -1896,7 +1896,10 @@ window.renderAll=renderAll;
         "ws URL: "+(ws?.url||""),
         "candles: "+(S.c?.length||0),
         "live: "+(S.live??""),
-        "liveFresh: "+!!S.liveFresh
+        "liveFresh: "+!!S.liveFresh,
+        "",
+        "CONNECTION TRACE:",
+        ...((S.vantaTrace||[]).length ? S.vantaTrace : ["NO TRACE RECORDED"])
       ].join("\n");
       const el=document.getElementById("vanta-debug-output");
       if(el)el.textContent=out;
