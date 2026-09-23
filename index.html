@@ -1481,6 +1481,7 @@ function init(){
   }
   setTimeout(dismissIntro,5000);
   setInterval(()=>{
+    S.market=classify();
     if(S.pos){
       const lp=livePos();
       if(lp){

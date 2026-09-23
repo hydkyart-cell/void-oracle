@@ -32,3 +32,30 @@ branding reference without requiring a behavioral change.
 ### Next Action
 Run repository integrity and JavaScript syntax checks, then record the
 next evidence-based diagnostic before making another behavioral change.
+
+## Cycle 002
+### Observation
+VANTA had explicit LIVE, DELAYED, and STALE freshness classification, but classification was not periodically re-evaluated when no position was open.
+
+### Diagnosis
+A silent or stalled WebSocket could leave the last displayed market state unchanged until another event triggered classification.
+
+### Hypothesis
+A periodic freshness classification tick should allow a silent or stalled feed to transition from LIVE to DELAYED or STALE based on elapsed quote age.
+
+### Change
+Added `S.market=classify();` to the existing 3-second monitor interval in both `index.html` and `public/index.html`.
+
+### Verification
+Both active HTML copies passed embedded JavaScript syntax validation.
+`git diff --check` passed.
+Final behavioral diff contains only one added line per active copy.
+
+### Result
+Freshness classification is now periodically re-evaluated independently of incoming feed events. Signal, execution, and trading gates were not modified.
+
+### Learning
+The freshness thresholds were already explicit and conservative. The missing component was periodic evaluation of those thresholds during periods without incoming feed events.
+
+### Next Action
+Observe runtime behavior and verify that market status transitions correctly when live feed messages stop.
