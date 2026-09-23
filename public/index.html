@@ -1498,16 +1498,26 @@ function renderRadar(){
 }
 
 function init(){
+  vantaTrace("INIT START");
   try{
+    vantaTrace("INIT: load()");
     load();
+    vantaTrace("INIT: loadPos()");
     loadPos();
+    vantaTrace("INIT: loadDaily()");
     loadDaily();
+    vantaTrace("INIT: updateToggles()");
     updateToggles();
     document.documentElement.setAttribute("data-theme",S.theme);
+    vantaTrace("INIT: initChart()");
     initChart();
+    vantaTrace("INIT: initParticles()");
     initParticles();
+    vantaTrace("INIT: initNebula()");
     initNebula();
+    vantaTrace("INIT: drawParticles()");
     drawParticles();
+    vantaTrace("INIT: drawNebula()");
     drawNebula();
     const cached=loadCandles(S.asset,S.tf);
     if(cached){
@@ -1515,13 +1525,17 @@ function init(){
       S.market=classify();
       S.an=analyze(S.c);
     }
+    vantaTrace("INIT: renderAll()");
     renderAll();
+    vantaTrace("INIT: CONNECT CALL");
     connect();
+    vantaTrace("INIT: CONNECT RETURNED");
     if(S.radarOn){
       S.radarTimer=setInterval(scanAll,35000);
       setTimeout(scanAll,3000);
     }
   }catch(e){
+    vantaTrace("INIT ERROR: "+String(e?.message||e));
     console.error("INIT ERROR:",e);
     renderAll();
   }
