@@ -661,21 +661,53 @@ return"STALE";
 function curPrice(){return Number.isFinite(S.live)?S.live:((S.c[S.c.length-1]||{}).c??null)}
 async function loadMTF(){if(!S.useMtf||!S.c.length)return;try{for(const tf of["1h","4h"]){const data=isCrypto(S.asset)?await fetchCrypto(S.asset,tf):isStock(S.asset)?await fetchStock(S.asset,tf):await fetchForex(S.asset,tf);S.mtf[tf]=mtfBias(data);}}catch(e){console.log("MTF",e);}}
 
+
+function vantaTrace(msg){
+  try{
+    S.vantaTrace=S.vantaTrace||[];
+    S.vantaTrace.push(new Date().toLocaleTimeString()+" | "+msg);
+    if(S.vantaTrace.length>20)S.vantaTrace.shift();
+    const el=document.getElementById("vanta-debug-output");
+    if(el){
+      const ws=S.ws;
+      const state=["CONNECTING","OPEN","CLOSING","CLOSED"];
+      el.textContent=[
+        "lastError: "+(S.lastError||""),
+        "market: "+(S.market||""),
+        "ws readyState: "+(ws ? state[ws.readyState] : "NO SOCKET"),
+        "ws URL: "+(ws?.url||""),
+        "candles: "+(S.c?.length||0),
+        "live: "+(S.live??""),
+        "liveFresh: "+!!S.liveFresh,
+        "",
+        "CONNECTION TRACE:",
+        ...S.vantaTrace
+      ].join("\n");
+    }
+  }catch(e){}
+}
+
+/* VANTA CONNECTION TRACE */
+
 async function connect(){
-if(S.loading)return;
+vantaTrace("CONNECT START");
+if(S.loading){vantaTrace("CONNECT SKIPPED: already loading");return;}
 S.loading=true;
+vantaTrace("LOADING TRUE");
 cleanup();
 S.lastError="";
 try{
 if(!isCrypto(S.asset)&&!($('inKey')?.value||"").trim())
 throw new Error("Enter API key for Forex/Stocks");
 
+vantaTrace("FETCH START: "+S.asset+" "+S.tf);
 S.c=isCrypto(S.asset)
 ?await fetchCrypto(S.asset,S.tf)
 :isStock(S.asset)
 ?await fetchStock(S.asset,S.tf)
 :await fetchForex(S.asset,S.tf);
 
+vantaTrace("FETCH COMPLETE: candles="+(S.c?.length||0));
 S.live=(S.c[S.c.length-1]||{}).c??null;
 S.liveAt=0;
 S.liveFresh=false;
@@ -690,6 +722,7 @@ await loadMTF();
 saveCandles();
 renderAll();
 
+vantaTrace("START WS");
 if(isCrypto(S.asset))startWS();
 else S.timer=setInterval(async()=>{
 try{
@@ -704,6 +737,7 @@ S.lastError="";
 saveCandles();
 renderAll();
 }catch(e){
+vantaTrace("CONNECT ERROR: "+String(e?.message||e));
 S.lastError=String(e?.message||e);
 S.market="ERROR";
 console.error("VANTA DATA ERROR:",e);
@@ -726,11 +760,13 @@ S.market="ERROR";
 
 renderAll();
 }finally{
+vantaTrace("CONNECT FINISH");
 S.loading=false;
 }}
 function startWS(){
 if(!isCrypto(S.asset)||S.ws)return;
 
+vantaTrace("WS CREATE: "+S.asset+" "+S.tf);
 const w=new WebSocket("wss://stream.binance.com:9443/ws/"+S.asset.toLowerCase()+"@kline_"+S.tf);
 S.ws=w;
 
@@ -786,6 +822,7 @@ console.error("VANTA WS error:",err);
 };
 
 w.onerror=()=>{
+vantaTrace("WS ERROR");
 S.lastError="WebSocket error";
 S.market="ERROR";
 console.error("VANTA WS error");
@@ -794,6 +831,7 @@ try{w.close();}catch{}
 };
 
 w.onclose=()=>{
+vantaTrace("WS CLOSE");
 if(S.ws!==w)return;
 
 S.ws=null;
@@ -812,6 +850,7 @@ if(isCrypto(S.asset)&&!S.ws)startWS();
 };
 
 w.onopen=()=>{
+vantaTrace("WS OPEN");
 S.backoff=2000;
 S.integ=integ(S.c,S.tf);
 S.market=classify();
