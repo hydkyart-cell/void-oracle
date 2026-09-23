@@ -1,4 +1,4 @@
-const CACHE_NAME = "void-oracle-v4";
+const CACHE_NAME = "vanta-v5";
 
 const APP_SHELL = [
   "/",
@@ -31,27 +31,24 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
 
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
   event.respondWith(
-    caches.match(event.request).then(cachedResponse => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request)
-        .then(networkResponse => {
-          if (!networkResponse || !networkResponse.ok) {
-            return networkResponse;
-          }
-
+    fetch(event.request)
+      .then(networkResponse => {
+        if (networkResponse && networkResponse.ok) {
           const responseClone = networkResponse.clone();
-
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseClone);
           });
-
-          return networkResponse;
-        })
-        .catch(() => caches.match("/index.html"));
-    })
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(event.request).then(cachedResponse => {
+        if (cachedResponse) return cachedResponse;
+        if (event.request.mode === "navigate") return caches.match("/index.html");
+        return Response.error();
+      }))
   );
 });
