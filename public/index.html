@@ -1856,6 +1856,39 @@ window.renderAll=renderAll;
 <script>if ("serviceWorker" in navigator) { window.addEventListener("load", () => { navigator.serviceWorker.register("/service-worker.js").then(r => console.log("VANTA service worker registered:", r.scope)).catch(e => console.error("VANTA service worker registration failed:", e)); }); }</script>
 
 
+
+<!-- VANTA DEBUG PANEL -->
+<div id="vanta-debug-panel" style="position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#05070b;color:#d4a017;border:1px solid #d4a017;padding:10px;font:12px monospace;border-radius:6px;box-shadow:0 0 18px #000;">
+  <b>VANTA DEBUG PANEL</b>
+  <pre id="vanta-debug-output" style="margin:6px 0 0;white-space:pre-wrap;color:#fff;"></pre>
+</div>
+<script>
+(function(){
+  function vantaDebug(){
+    try{
+      const ws=S.ws;
+      const state=["CONNECTING","OPEN","CLOSING","CLOSED"];
+      const out=[
+        "lastError: "+(S.lastError||""),
+        "market: "+(S.market||""),
+        "ws readyState: "+(ws ? state[ws.readyState] : "NO SOCKET"),
+        "ws URL: "+(ws?.url||""),
+        "candles: "+(S.c?.length||0),
+        "live: "+(S.live??""),
+        "liveFresh: "+!!S.liveFresh,
+        "",
+        "CONNECTION TRACE:",
+        ...((S.vantaTrace||[]).length ? S.vantaTrace : ["NO TRACE RECORDED"])
+      ].join("\n");
+      const el=document.getElementById("vanta-debug-output");
+      if(el)el.textContent=out;
+    }catch(e){}
+  }
+  setInterval(vantaDebug,500);
+  setTimeout(vantaDebug,100);
+})();
+</script>
+
 </body>
 </html>
 \n<!-- VANTA NONCRYPTO TRACE -->\n
