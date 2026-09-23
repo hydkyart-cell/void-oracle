@@ -662,46 +662,19 @@ function curPrice(){return Number.isFinite(S.live)?S.live:((S.c[S.c.length-1]||{
 async function loadMTF(){if(!S.useMtf||!S.c.length)return;try{for(const tf of["1h","4h"]){const data=isCrypto(S.asset)?await fetchCrypto(S.asset,tf):isStock(S.asset)?await fetchStock(S.asset,tf):await fetchForex(S.asset,tf);S.mtf[tf]=mtfBias(data);}}catch(e){console.log("MTF",e);}}
 
 
-function vantaTrace(msg){
-  try{
-    S.vantaTrace=S.vantaTrace||[];
-    S.vantaTrace.push(new Date().toLocaleTimeString()+" | "+msg);
-    if(S.vantaTrace.length>20)S.vantaTrace.shift();
-    const el=document.getElementById("vanta-debug-output");
-    if(el){
-      const ws=S.ws;
-      const state=["CONNECTING","OPEN","CLOSING","CLOSED"];
-      el.textContent=[
-        "lastError: "+(S.lastError||""),
-        "market: "+(S.market||""),
-        "ws readyState: "+(ws ? state[ws.readyState] : "NO SOCKET"),
-        "ws URL: "+(ws?.url||""),
-        "candles: "+(S.c?.length||0),
-        "live: "+(S.live??""),
-        "liveFresh: "+!!S.liveFresh,
-        "",
-        "CONNECTION TRACE:",
-        ...S.vantaTrace
-      ].join("\n");
-    }
-  }catch(e){}
-}
 
-/* VANTA CONNECTION TRACE */
 
 async function connect(){
-vantaTrace("CONNECT START");
+
 if(S.loading){vantaTrace("CONNECT SKIPPED: already loading");return;}
 S.loading=true;
-vantaTrace("LOADING TRUE");
+
 cleanup();
 S.lastError="";
 try{
 if(!isCrypto(S.asset)&&!($('inKey')?.value||"").trim())
 throw new Error("Enter API key for Forex/Stocks");
 
-vantaTrace("FETCH START: "+S.asset+" "+S.tf);
-vantaTrace("DATA PATH: "+(isCrypto(S.asset)?"CRYPTO":isStock(S.asset)?"STOCK":"FOREX")+" | "+S.asset+" | "+S.tf);
 
 S.c=isCrypto(S.asset)
 ?await fetchCrypto(S.asset,S.tf)
@@ -709,17 +682,14 @@ S.c=isCrypto(S.asset)
 ?await fetchStock(S.asset,S.tf)
 :await fetchForex(S.asset,S.tf);
 
-vantaTrace("DATA RESULT: candles="+(S.c?.length||0));
-
-vantaTrace("FETCH COMPLETE: candles="+(S.c?.length||0));
 S.live=(S.c[S.c.length-1]||{}).c??null;
 S.liveAt=0;
 S.liveFresh=false;
 
 if(!isCrypto(S.asset)){
-  vantaTrace("QUOTE START: "+S.asset);
+
   await fetchQuote(S.asset);
-  vantaTrace("QUOTE RESULT: live="+(S.live??"")+" fresh="+!!S.liveFresh);
+
 }
 
 S.integ=integ(S.c,S.tf);
@@ -730,7 +700,6 @@ await loadMTF();
 saveCandles();
 renderAll();
 
-vantaTrace("START WS");
 if(isCrypto(S.asset))startWS();
 else S.timer=setInterval(async()=>{
 try{
@@ -745,7 +714,7 @@ S.lastError="";
 saveCandles();
 renderAll();
 }catch(e){
-vantaTrace("CONNECT ERROR: "+String(e?.message||e));
+
 S.lastError=String(e?.message||e);
 S.market="ERROR";
 console.error("VANTA DATA ERROR:",e);
@@ -768,13 +737,12 @@ S.market="ERROR";
 
 renderAll();
 }finally{
-vantaTrace("CONNECT FINISH");
+
 S.loading=false;
 }}
 function startWS(){
 if(!isCrypto(S.asset)||S.ws)return;
 
-vantaTrace("WS CREATE: "+S.asset+" "+S.tf);
 const w=new WebSocket("wss://stream.binance.com:9443/ws/"+S.asset.toLowerCase()+"@kline_"+S.tf);
 S.ws=w;
 
@@ -830,7 +798,7 @@ console.error("VANTA WS error:",err);
 };
 
 w.onerror=()=>{
-vantaTrace("WS ERROR");
+
 S.lastError="WebSocket error";
 S.market="ERROR";
 console.error("VANTA WS error");
@@ -839,7 +807,7 @@ try{w.close();}catch{}
 };
 
 w.onclose=()=>{
-vantaTrace("WS CLOSE");
+
 if(S.ws!==w)return;
 
 S.ws=null;
@@ -858,7 +826,7 @@ if(isCrypto(S.asset)&&!S.ws)startWS();
 };
 
 w.onopen=()=>{
-vantaTrace("WS OPEN");
+
 S.backoff=2000;
 S.integ=integ(S.c,S.tf);
 S.market=classify();
@@ -1506,43 +1474,43 @@ function renderRadar(){
 }
 
 function init(){
-  vantaTrace("INIT START");
+
   try{
-    vantaTrace("INIT: load()");
+
     load();
-    vantaTrace("INIT: loadPos()");
+
     loadPos();
-    vantaTrace("INIT: loadDaily()");
+
     loadDaily();
-    vantaTrace("INIT: updateToggles()");
+
     updateToggles();
     document.documentElement.setAttribute("data-theme",S.theme);
-    vantaTrace("INIT: initChart()");
+
     initChart();
-    vantaTrace("INIT: initParticles()");
+
     initParticles();
-    vantaTrace("INIT: initNebula()");
+
     initNebula();
-    vantaTrace("INIT: drawParticles()");
+
     drawParticles();
-    vantaTrace("INIT: drawNebula() skipped: no drawNebula function");
+
     const cached=loadCandles(S.asset,S.tf);
     if(cached){
       S.integ=integ(S.c,S.tf);
       S.market=classify();
       S.an=analyze(S.c);
     }
-    vantaTrace("INIT: renderAll()");
+
     renderAll();
-    vantaTrace("INIT: CONNECT CALL");
+
     connect();
-    vantaTrace("INIT: CONNECT RETURNED");
+
     if(S.radarOn){
       S.radarTimer=setInterval(scanAll,35000);
       setTimeout(scanAll,3000);
     }
   }catch(e){
-    vantaTrace("INIT ERROR: "+String(e?.message||e));
+
     console.error("INIT ERROR:",e);
     renderAll();
   }
@@ -1886,37 +1854,7 @@ window.renderAll=renderAll;
 </script>
 
 <script>if ("serviceWorker" in navigator) { window.addEventListener("load", () => { navigator.serviceWorker.register("/service-worker.js").then(r => console.log("VANTA service worker registered:", r.scope)).catch(e => console.error("VANTA service worker registration failed:", e)); }); }</script>
-<div id="vanta-debug-panel" style="position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#05070b;color:#d4a017;border:1px solid #d4a017;padding:10px;font:12px monospace;border-radius:6px;box-shadow:0 0 18px #000;">
-  <b>VANTA DEBUG PANEL</b>
-  <pre id="vanta-debug-output" style="margin:6px 0 0;white-space:pre-wrap;color:#fff;"></pre>
-</div>
-<script>
-(function(){
-  function vantaDebug(){
-    try{
-      const ws=S.ws;
-      const state=["CONNECTING","OPEN","CLOSING","CLOSED"];
-      const out=[
-        "lastError: "+(S.lastError||""),
-        "market: "+(S.market||""),
-        "ws readyState: "+(ws ? state[ws.readyState] : "NO SOCKET"),
-        "ws URL: "+(ws?.url||""),
-        "candles: "+(S.c?.length||0),
-        "live: "+(S.live??""),
-        "liveFresh: "+!!S.liveFresh,
-        "",
-        "CONNECTION TRACE:",
-        ...((S.vantaTrace||[]).length ? S.vantaTrace : ["NO TRACE RECORDED"])
-      ].join("\n");
-      const el=document.getElementById("vanta-debug-output");
-      if(el)el.textContent=out;
-    }catch(e){}
-  }
-  setInterval(vantaDebug,500);
-  setTimeout(vantaDebug,100);
-})();
-</script>
-<!-- VANTA DEBUG PANEL -->
+
 
 </body>
 </html>
