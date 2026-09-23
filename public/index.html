@@ -786,6 +786,10 @@ console.error("VANTA WS error:",err);
 };
 
 w.onerror=()=>{
+S.lastError="WebSocket error";
+S.market="ERROR";
+console.error("VANTA WS error");
+renderAll();
 try{w.close();}catch{}
 };
 
@@ -793,6 +797,9 @@ w.onclose=()=>{
 if(S.ws!==w)return;
 
 S.ws=null;
+S.lastError="WebSocket closed";
+console.warn("VANTA WS closed");
+renderAll();
 
 if(isCrypto(S.asset)){
 const delay=S.backoff;
@@ -853,7 +860,7 @@ lastPrice=price;
 }
 pEl.textContent=fmt(price);
 if(S.pos){const lp=livePos();pEl.className="core-price "+(lp.move>=0?"up":"down");}else{pEl.className="core-price";}
-$('coreLabel').textContent=S.market==="LIVE"?"LIVE FEED":S.market==="DELAYED"?"DELAYED":S.market==="STALE"?"STALE":"OFFLINE";
+$('coreLabel').textContent=S.market==="ERROR"?("ERROR: "+(S.lastError||"Unknown error")):S.market==="LIVE"?"LIVE FEED":S.market==="DELAYED"?"DELAYED":S.market==="STALE"?"STALE":"OFFLINE";
 const sigText=ex.state.startsWith("EXECUTE")?"EXECUTE "+ex.state.replace("EXECUTE ",""):ex.state;
 const coreSig=$('coreSig');coreSig.innerHTML='<span class="'+ex.cls+'">'+sigText+'</span>';
 if(ex.state.startsWith("EXECUTE")&&S.lastSigId!==(S.an?S.an.dir+S.an.close+S.an.score:"")&&S.booted){S.lastSigId=S.an?S.an.dir+S.an.close+S.an.score:"";vantaAlert(S.an.dir,S.an.score);}
