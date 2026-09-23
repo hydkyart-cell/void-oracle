@@ -1517,8 +1517,7 @@ function init(){
     initNebula();
     vantaTrace("INIT: drawParticles()");
     drawParticles();
-    vantaTrace("INIT: drawNebula()");
-    drawNebula();
+    vantaTrace("INIT: drawNebula() skipped: no drawNebula function");
     const cached=loadCandles(S.asset,S.tf);
     if(cached){
       S.integ=integ(S.c,S.tf);
