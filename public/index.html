@@ -701,18 +701,26 @@ if(!isCrypto(S.asset)&&!($('inKey')?.value||"").trim())
 throw new Error("Enter API key for Forex/Stocks");
 
 vantaTrace("FETCH START: "+S.asset+" "+S.tf);
+vantaTrace("DATA PATH: "+(isCrypto(S.asset)?"CRYPTO":isStock(S.asset)?"STOCK":"FOREX")+" | "+S.asset+" | "+S.tf);
+
 S.c=isCrypto(S.asset)
 ?await fetchCrypto(S.asset,S.tf)
 :isStock(S.asset)
 ?await fetchStock(S.asset,S.tf)
 :await fetchForex(S.asset,S.tf);
 
+vantaTrace("DATA RESULT: candles="+(S.c?.length||0));
+
 vantaTrace("FETCH COMPLETE: candles="+(S.c?.length||0));
 S.live=(S.c[S.c.length-1]||{}).c??null;
 S.liveAt=0;
 S.liveFresh=false;
 
-if(!isCrypto(S.asset))await fetchQuote(S.asset);
+if(!isCrypto(S.asset)){
+  vantaTrace("QUOTE START: "+S.asset);
+  await fetchQuote(S.asset);
+  vantaTrace("QUOTE RESULT: live="+(S.live??"")+" fresh="+!!S.liveFresh);
+}
 
 S.integ=integ(S.c,S.tf);
 S.market=classify();
@@ -1912,3 +1920,4 @@ window.renderAll=renderAll;
 
 </body>
 </html>
+\n<!-- VANTA NONCRYPTO TRACE -->\n
