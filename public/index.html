@@ -744,98 +744,219 @@ renderAll();
 S.loading=false;
 }}
 function startWS(){
-if(!isCrypto(S.asset)||S.ws)return;
+  if(!isCrypto(S.asset)||S.ws||S.wsConnecting)return;
 
-const w=new WebSocket("wss://stream.binance.com:9443/ws/"+S.asset.toLowerCase()+"@kline_"+S.tf);
-S.ws=w;
+  S.wsConnecting=true;
+  S.lastError="";
+  S.market="OFFLINE";
+  renderAll();
 
-w.onmessage=e=>{
-try{
-const k=JSON.parse(e.data).k;
+  const asset=S.asset;
+  const tf=S.tf;
+  const url="wss://stream.binance.com:9443/ws/"+asset.toLowerCase()+"@kline_"+tf;
+  const w=new WebSocket(url);
 
-if(Number.isFinite(+k.c)){
-S.live=+k.c;
-S.liveAt=Date.now();
-S.liveFresh=true;
+  S.ws=w;
 
-if(S.c.length){
-S.integ=integ(S.c,S.tf);
-S.market=classify();
+  const connectionTimeout=setTimeout(()=>{
+    if(S.ws===w&&w.readyState!==WebSocket.OPEN){
+      console.warn("VANTA WS connection timeout");
+      try{w.close();}catch{}
+    }
+  },10000);
+
+  w.onopen=()=>{
+    clearTimeout(connectionTimeout);
+
+    if(S.ws!==w){
+      try{w.close();}catch{}
+      return;
+    }
+
+    S.wsConnecting=false;
+    S.backoff=2000;
+    S.lastError="";
+    S.liveFresh=true;
+    S.integ=integ(S.c,S.tf);
+    S.market=classify();
+    renderAll();
+  };
+
+  w.onmessage=e=>{
+    try{
+      const payload=JSON.parse(e.data);
+      const k=payload.k;
+      if(!k)return;
+
+      if(Number.isFinite(+k.c)){
+        S.live=+k.c;
+        S.liveAt=Date.now();
+        S.liveFresh=true;
+
+        if(S.c.length){
+          S.integ=integ(S.c,S.tf);
+          S.market=classify();
+        }
+
+        renderAll();
+      }
+
+      if(k.x){
+        const last=S.c[S.c.length-1];
+
+        if(last&&last.t===+k.t){
+          last.o=+k.o;
+          last.h=+k.h;
+          last.l=+k.l;
+          last.c=+k.c;
+          last.v=+k.v;
+        }else if(!last||+k.t>last.t){
+          S.c.push({
+            t:+k.t,
+            o:+k.o,
+            h:+k.h,
+            l:+k.l,
+            c:+k.c,
+            v:+k.v
+          });
+
+          if(S.c.length>CFG.limit)S.c.shift();
+        }
+
+        S.integ=integ(S.c,S.tf);
+        S.market=classify();
+        S.an=analyze(S.c);
+        saveCandles();
+        renderAll();
+      }
+    }catch(err){
+      console.error("VANTA WS message error:",err);
+    }
+  };
+
+  w.onerror=err=>{
+    clearTimeout(connectionTimeout);
+
+    if(S.ws!==w)return;
+
+    S.wsConnecting=false;
+    S.lastError="Live WebSocket unavailable";
+    console.warn("VANTA WS unavailable; REST fallback will handle live data",err);
+
+    try{w.close();}catch{}
+    renderAll();
+
+    startCryptoFallback();
+  };
+
+  w.onclose=()=>{
+    clearTimeout(connectionTimeout);
+
+    if(S.ws!==w)return;
+
+    S.ws=null;
+    S.wsConnecting=false;
+
+    if(!S.liveFresh){
+      S.lastError="Live feed reconnecting";
+    }
+
+    console.warn("VANTA WS closed");
+    renderAll();
+
+    if(isCrypto(S.asset)){
+      startCryptoFallback();
+
+      const delay=S.backoff;
+      S.backoff=Math.min(S.backoff*2,30000);
+
+      setTimeout(()=>{
+        if(isCrypto(S.asset)&&!S.ws&&!S.wsConnecting)startWS();
+      },delay);
+    }
+  };
 }
 
-renderAll();
+let cryptoFallbackTimer=null;
+let cryptoFallbackBusy=false;
+
+function stopCryptoFallback(){
+  if(cryptoFallbackTimer){
+    clearInterval(cryptoFallbackTimer);
+    cryptoFallbackTimer=null;
+  }
+  cryptoFallbackBusy=false;
 }
 
-if(k.x){
-const last=S.c[S.c.length-1];
+async function runCryptoFallback(){
+  if(!isCrypto(S.asset)||cryptoFallbackBusy||S.ws)return;
 
-if(last&&last.t===+k.t){
-last.o=+k.o;
-last.h=+k.h;
-last.l=+k.l;
-last.c=+k.c;
-last.v=+k.v;
-}else if(!last||+k.t>last.t){
-S.c.push({
-t:+k.t,
-o:+k.o,
-h:+k.h,
-l:+k.l,
-c:+k.c,
-v:+k.v
-});
+  cryptoFallbackBusy=true;
 
-if(S.c.length>CFG.limit)S.c.shift();
+  try{
+    const symbol=S.asset.toUpperCase();
+    const interval=S.tf;
+    const url="https://api.binance.com/api/v3/klines?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval)+"&limit="+CFG.limit;
+
+    const res=await fetch(url,{cache:"no-store"});
+    if(!res.ok)throw new Error("Binance REST HTTP "+res.status);
+
+    const rows=await res.json();
+    if(!Array.isArray(rows)||!rows.length)throw new Error("Empty Binance REST response");
+
+    S.c=rows.map(r=>({
+      t:+r[0],
+      o:+r[1],
+      h:+r[2],
+      l:+r[3],
+      c:+r[4],
+      v:+r[5]
+    }));
+
+    if(S.c.length>CFG.limit)S.c=S.c.slice(-CFG.limit);
+
+    const last=S.c[S.c.length-1];
+    if(last&&Number.isFinite(last.c)){
+      S.live=last.c;
+      S.liveAt=Date.now();
+      S.liveFresh=true;
+    }
+
+    S.integ=integ(S.c,S.tf);
+    S.market=classify();
+    S.an=analyze(S.c);
+    S.lastError="";
+    saveCandles();
+    renderAll();
+  }catch(err){
+    console.warn("VANTA crypto REST fallback failed:",err);
+    S.lastError="Live feed unavailable";
+    renderAll();
+  }finally{
+    cryptoFallbackBusy=false;
+  }
 }
 
-S.integ=integ(S.c,S.tf);
-S.market=classify();
-S.an=analyze(S.c);
+function startCryptoFallback(){
+  if(!isCrypto(S.asset)||S.ws||cryptoFallbackTimer)return;
 
-saveCandles();
-renderAll();
+  runCryptoFallback();
+
+  cryptoFallbackTimer=setInterval(()=>{
+    if(!isCrypto(S.asset)){
+      stopCryptoFallback();
+      return;
+    }
+
+    if(S.ws){
+      stopCryptoFallback();
+      return;
+    }
+
+    runCryptoFallback();
+  },15000);
 }
-}catch(err){
-console.error("VANTA WS error:",err);
-}
-};
 
-w.onerror=()=>{
-
-S.lastError="WebSocket error";
-S.market="ERROR";
-console.error("VANTA WS error");
-renderAll();
-try{w.close();}catch{}
-};
-
-w.onclose=()=>{
-
-if(S.ws!==w)return;
-
-S.ws=null;
-S.lastError="WebSocket closed";
-console.warn("VANTA WS closed");
-renderAll();
-
-if(isCrypto(S.asset)){
-const delay=S.backoff;
-S.backoff=Math.min(S.backoff*2,30000);
-
-setTimeout(()=>{
-if(isCrypto(S.asset)&&!S.ws)startWS();
-},delay);
-}
-};
-
-w.onopen=()=>{
-
-S.backoff=2000;
-S.integ=integ(S.c,S.tf);
-S.market=classify();
-renderAll();
-};
-}
 function updateMotion(){
   const core=document.getElementById("signalCore");
   if(!core)return;

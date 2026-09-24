@@ -1,4 +1,4 @@
-const CACHE_NAME = "vanta-v5";
+const CACHE_NAME = "vanta-v6-livefix";
 
 const APP_SHELL = [
   "/",
