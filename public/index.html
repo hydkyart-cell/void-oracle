@@ -13,7 +13,7 @@
 [data-theme="light"]{--vanta:#f8fafc;--vanta-mid:#f1f5f9;--vanta-elevated:#e2e8f0;--glass:rgba(0,0,0,0.03);--glass-border:rgba(0,0,0,0.08);--text:#0f172a;--text-dim:#475569;--text-faint:#94a3b8;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
 html,body{height:100dvh;background:var(--vanta);color:var(--text);font-family:'Inter',system-ui,sans-serif;overflow:hidden;touch-action:pan-y;}
-#intro-splash{position:fixed;inset:0;z-index:9999;background:var(--vanta);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.8s cubic-bezier(0.16,1,0.3,1),visibility 0.8s;}
+#vanta-transition{position:fixed;inset:0;z-index:10000;background:var(--vanta);display:flex;align-items:center;justify-content:center;opacity:1;visibility:visible;pointer-events:none;transition:opacity 0.9s cubic-bezier(0.16,1,0.3,1),visibility 0.9s;}#vanta-transition img{width:100%;height:100%;object-fit:cover;animation:vanta-transition-in 1.8s cubic-bezier(0.16,1,0.3,1) both;}#vanta-transition.done{opacity:0;visibility:hidden;}@keyframes vanta-transition-in{from{opacity:0;transform:scale(1.04)}to{opacity:1;transform:scale(1)}}#intro-splash{position:fixed;inset:0;z-index:9999;background:var(--vanta);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.8s cubic-bezier(0.16,1,0.3,1),visibility 0.8s;}
 #intro-splash.done{opacity:0;visibility:hidden;pointer-events:none}
 .intro-glitch{font-family:'JetBrains Mono',monospace;font-size:clamp(28px,8vw,64px);font-weight:800;letter-spacing:-0.04em;color:var(--text);position:relative;animation:intro-fade-in 1.2s ease both}
 .intro-glitch::before,.intro-glitch::after{content:attr(data-text);position:absolute;left:0;top:0;width:100%;height:100%;opacity:0}
@@ -241,6 +241,9 @@ html,body{height:100dvh;background:var(--vanta);color:var(--text);font-family:'I
 <div id="vignette"></div>
 <div id="grain"></div>
 
+<div id="vanta-transition" aria-hidden="true">
+  <img src="/icons/vanta-transition.png" alt="">
+</div>
 <div id="intro-splash" onclick="if(window.VantaAudio)VantaAudio.init()">
   <div class="intro-glitch" data-text="VANTA" style="text-shadow:0 0 10px var(--cyan-glow),0 0 20px var(--violet-glow)">VANTA</div>
   <div class="intro-sub">Championship Execution Protocol</div>
@@ -554,7 +557,7 @@ function absorption(c,i,a){if(i<5||!a||!a.vol.ok)return false;const volNow=a.vol
 function dailyReset(){const today=new Date().toDateString();if(S.lastDay!==today){S.daily={trades:0,wins:0,losses:0,be:0,pl:0,r:0,date:today,streak:0,maxLosses:2,maxTrades:3};S.lastDay=today;}}
 function canTrade(){dailyReset();if(S.champ){if(S.daily.losses>=S.daily.maxLosses)return{ok:false,reason:"CHAMP MODE: Daily loss limit ("+S.daily.maxLosses+") reached. Stop trading."};if(S.daily.trades>=S.daily.maxTrades)return{ok:false,reason:"CHAMP MODE: Max trades today ("+S.daily.maxTrades+"). Done."};if(S.daily.streak<=-2)return{ok:false,reason:"CHAMP MODE: 2 consecutive losses. Stop for today."};}return{ok:true};}
 
-function analyze(c){if(c.length<200)return null;const close=c.map(x=>x.c),i=c.length-1;const e20=ema(close,20),e50=ema(close,50),e200=ema(close,200),r=rsi(close),a=atr(c),m=macd(close),d=adx(c),bb=bbands(close);if([e20[i],e50[i],e200[i],r[i],a[i],m.h[i],d.adx[i],bb[i]?.upper].some(x=>!Number.isFinite(x)))return null;const prior=c.slice(Math.max(0,i-CFG.lookback),i),hi=Math.max(...prior.map(x=>x.h)),lo=Math.min(...prior.map(x=>x.l));const atp=a[i]/close[i]*100;const struct=structure(c,i);const vol=volA(c,i);const ob=obFind(c,i,a[i]);const emaAlign=close[i]>e20[i]&&e20[i]>e50[i]&&e50[i]>e200[i]?1:close[i]<e20[i]&&e20[i]<e50[i]&&e50[i]<e200[i]?-1:0;const slope20=(e20[i]-e20[i-5])/a[i];const slope50=(e50[i]-e50[i-10])/a[i];let trendScore=0;if(emaAlign===1)trendScore=18+(slope20>0?6:0)+(slope50>0?6:0);else if(emaAlign===-1)trendScore=18+(slope20<0?6:0)+(slope50<0?6:0);else trendScore=Math.abs(slope20)*3;trendScore=Math.min(30,trendScore);const rsiVal=r[i];const macdMom=m.h[i]-m.h[i-3];let momScore=0;if(emaAlign===1){momScore=(rsiVal>=45&&rsiVal<=68?8:rsiVal>68?5:3)+(macdMom>0?10:3)+(m.h[i]>0?7:2);}else if(emaAlign===-1){momScore=(rsiVal<=55&&rsiVal>=32?8:rsiVal<32?5:3)+(macdMom<0?10:3)+(m.h[i]<0?7:2);}else{momScore=10;}momScore=Math.min(25,momScore);const breakL=close[i]>hi,breakS=close[i]<lo;let structScore=0;if(struct){if(emaAlign===1&&struct.bos==="BULL")structScore=18;else if(emaAlign===-1&&struct.bos==="BEAR")structScore=18;else if(struct.trend==="BULL"&&breakL)structScore=15;else if(struct.trend==="BEAR"&&breakS)structScore=15;else structScore=8;}if(breakL&&emaAlign!==-1)structScore+=7;if(breakS&&emaAlign!==1)structScore+=7;structScore=Math.min(25,structScore);let volObScore=0;if(vol.ok&&vol.ratio>=CFG.volMin)volObScore+=8;else if(vol.ok)volObScore+=4;if(ob){if(emaAlign===1&&ob.dir==="BULL"&&(ob.inZone||ob.distATR<=CFG.obMaxDist))volObScore+=12;else if(emaAlign===-1&&ob.dir==="BEAR"&&(ob.inZone||ob.distATR<=CFG.obMaxDist))volObScore+=12;else volObScore+=4;}volObScore=Math.min(20,volObScore);let ls=trendScore+momScore+structScore+volObScore+(breakL?5:0);let ss=trendScore+momScore+structScore+volObScore+(breakS?5:0);if(emaAlign===-1)ls*=0.7;if(emaAlign===1)ss*=0.7;ls=Math.min(100,Math.round(ls));ss=Math.min(100,Math.round(ss));let dir=ls>=CFG.minScore&&ls-ss>=CFG.minMargin?"LONG":ss>=CFG.minScore&&ss-ls>=CFG.minMargin?"SHORT":null;const regime=d.adx[i]>=25?(emaAlign===1?"TREND BULL":emaAlign===-1?"TREND BEAR":"TREND"):d.adx[i]<20?"RANGE":"TRANSITION";const bbSqueeze=bb[i].bandwidth<0.015?"SQUEEZE":bb[i].bandwidth<0.025?"NARROW":"WIDE";const fib=fibLevels(c,i,CFG.lookback*3);const discount=isDiscount({dir:emaAlign===1?"LONG":emaAlign===-1?"SHORT":null,struct},c,i);const abs=absorption(c,i,{dir:emaAlign===1?"LONG":emaAlign===-1?"SHORT":null,r,a,vol,m});return{i,e20,e50,e200,r,a,m,d,bb,ls,ss,dir,score:dir==="LONG"?ls:dir==="SHORT"?ss:Math.max(ls,ss),regime,hi,lo,ob,vol,struct,atp,bbSqueeze,close:close[i],decomp:{trend:trendScore,mom:momScore,struct:structScore,volOb:volObScore},fib,discount,absorption:abs,emaAlign,breakL,breakS,margin:Math.abs(ls-ss),vwap:vwap(c),pivot:pivotPoints(c)}}
+function analyze(c){if(c.length<200)return null;const close=c.map(x=>x.c),i=c.length-1;const e20=ema(close,20),e50=ema(close,50),e200=ema(close,200),r=rsi(close,CFG.rsi),a=atr(c,CFG.atr),m=macd(close),d=adx(c,CFG.adx),bb=bbands(close,CFG.bb,2);if([e20[i],e50[i],e200[i],r[i],a[i],m.h[i],d.adx[i],bb[i]?.upper].some(x=>!Number.isFinite(x)))return null;const prior=c.slice(Math.max(0,i-CFG.lookback),i),hi=Math.max(...prior.map(x=>x.h)),lo=Math.min(...prior.map(x=>x.l));const atp=a[i]/close[i]*100;const struct=structure(c,i);const vol=volA(c,i);const ob=obFind(c,i,a[i]);const emaAlign=close[i]>e20[i]&&e20[i]>e50[i]&&e50[i]>e200[i]?1:close[i]<e20[i]&&e20[i]<e50[i]&&e50[i]<e200[i]?-1:0;const slope20=(e20[i]-e20[i-5])/a[i];const slope50=(e50[i]-e50[i-10])/a[i];let trendScore=0;if(emaAlign===1)trendScore=18+(slope20>0?6:0)+(slope50>0?6:0);else if(emaAlign===-1)trendScore=18+(slope20<0?6:0)+(slope50<0?6:0);else trendScore=Math.abs(slope20)*3;trendScore=Math.min(30,trendScore);const rsiVal=r[i];const macdMom=m.h[i]-m.h[i-3];let momScore=0;if(emaAlign===1){momScore=(rsiVal>=45&&rsiVal<=68?8:rsiVal>68?5:3)+(macdMom>0?10:3)+(m.h[i]>0?7:2);}else if(emaAlign===-1){momScore=(rsiVal<=55&&rsiVal>=32?8:rsiVal<32?5:3)+(macdMom<0?10:3)+(m.h[i]<0?7:2);}else{momScore=10;}momScore=Math.min(25,momScore);const breakL=close[i]>hi,breakS=close[i]<lo;let structScore=0;if(struct){if(emaAlign===1&&struct.bos==="BULL")structScore=18;else if(emaAlign===-1&&struct.bos==="BEAR")structScore=18;else if(struct.trend==="BULL"&&breakL)structScore=15;else if(struct.trend==="BEAR"&&breakS)structScore=15;else structScore=8;}if(breakL&&emaAlign!==-1)structScore+=7;if(breakS&&emaAlign!==1)structScore+=7;structScore=Math.min(25,structScore);let volObScore=0;if(vol.ok&&vol.ratio>=CFG.volMin)volObScore+=8;else if(vol.ok)volObScore+=4;if(ob){if(emaAlign===1&&ob.dir==="BULL"&&(ob.inZone||ob.distATR<=CFG.obMaxDist))volObScore+=12;else if(emaAlign===-1&&ob.dir==="BEAR"&&(ob.inZone||ob.distATR<=CFG.obMaxDist))volObScore+=12;else volObScore+=4;}volObScore=Math.min(20,volObScore);let ls=trendScore+momScore+structScore+volObScore+(breakL?5:0);let ss=trendScore+momScore+structScore+volObScore+(breakS?5:0);if(emaAlign===-1)ls*=0.7;if(emaAlign===1)ss*=0.7;ls=Math.min(100,Math.round(ls));ss=Math.min(100,Math.round(ss));let dir=ls>=CFG.minScore&&ls-ss>=CFG.minMargin?"LONG":ss>=CFG.minScore&&ss-ls>=CFG.minMargin?"SHORT":null;const regime=d.adx[i]>=25?(emaAlign===1?"TREND BULL":emaAlign===-1?"TREND BEAR":"TREND"):d.adx[i]<20?"RANGE":"TRANSITION";const bbSqueeze=bb[i].bandwidth<0.015?"SQUEEZE":bb[i].bandwidth<0.025?"NARROW":"WIDE";const fib=fibLevels(c,i,CFG.lookback*3);const discount=isDiscount({dir:emaAlign===1?"LONG":emaAlign===-1?"SHORT":null,struct},c,i);const abs=absorption(c,i,{dir:emaAlign===1?"LONG":emaAlign===-1?"SHORT":null,r,a,vol,m});return{i,e20,e50,e200,r,a,m,d,bb,ls,ss,dir,score:dir==="LONG"?ls:dir==="SHORT"?ss:Math.max(ls,ss),regime,hi,lo,ob,vol,struct,atp,bbSqueeze,close:close[i],decomp:{trend:trendScore,mom:momScore,struct:structScore,volOb:volObScore},fib,discount,absorption:abs,emaAlign,breakL,breakS,margin:Math.abs(ls-ss),vwap:vwap(c),pivot:pivotPoints(c)}}
 
 function buildPlan(a){if(!a||!a.dir)return null;const entry=a.close,sl=a.dir==="LONG"?a.lo-a.a[a.i]*.30:a.hi+a.a[a.i]*.30;const risk=Math.abs(entry-sl);if(!risk||risk/entry<0.001)return null;const rr=Math.max(.1,Number($('inRR')?.value)||2);const tp1=a.dir==="LONG"?entry+risk*1.5:entry-risk*1.5;const tp2=a.dir==="LONG"?entry+risk*rr:entry-risk*rr;const bal=Math.max(0,Number($('inBal')?.value)||0),rp=Math.max(0,Number($('inRisk')?.value)||0);const riskAmt=bal*rp/100,size=riskAmt/risk;const spread=Math.max(0,Number($('inSpread')?.value)||0);const slip=spread*0.5;const comm=entry*(CFG.comm/100);const friction=spread+slip+comm;const netRisk=risk+friction;const netR=netRisk>0?((a.dir==="LONG"?tp2-entry:entry-tp2)-friction)/netRisk:0;return{dir:a.dir,entry,sl,tp1,tp2,risk,riskAmt,size,rr,netR,friction,spread,slip,comm,score:a.score,regime:a.regime,atr:a.a[a.i],time:a.close||Date.now()}}
 
@@ -900,6 +903,224 @@ renderDaily();renderQuant();renderChart();renderAnalytics();renderGhost();render
 function renderDaily(){const panel=$('dailyPanel');if(!panel)return;if(!S.champ){panel.style.display='none';return;}panel.style.display='flex';dailyReset();const d=S.daily;const color=d.pl>=0?'var(--green)':'var(--red)';panel.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px"><div class="liquid-cell" style="padding:10px 4px"><div class="liquid-label">Trades</div><div class="liquid-value">'+d.trades+'/'+d.maxTrades+'</div></div><div class="liquid-cell" style="padding:10px 4px"><div class="liquid-label">Losses</div><div class="liquid-value" style="color:'+(d.losses>=d.maxLosses?'var(--red)':'var(--text)')+'">'+d.losses+'/'+d.maxLosses+'</div></div><div class="liquid-cell" style="padding:10px 4px"><div class="liquid-label">Streak</div><div class="liquid-value">'+d.streak+'</div></div><div class="liquid-cell" style="padding:10px 4px"><div class="liquid-label">P/L</div><div class="liquid-value" style="color:'+color+'">'+fmt$(d.pl)+'</div></div></div>';}
 
 function renderRadarBadge(){let hot=0;for(const sym in S.radar){const r=S.radar[sym];if(r&&r.ex&&r.ex.state.startsWith("EXECUTE")&&sym!==S.asset)hot++;}const pill=$('connPill');if(pill){const existing=pill.querySelector('.radar-dot');if(existing)existing.remove();if(hot>0){const dot=document.createElement('span');dot.className='radar-dot';dot.textContent=' '+hot;dot.style.cssText='background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:9px;margin-left:4px;font-weight:700';pill.appendChild(dot);}}}
+
+
+/* VANTA RESEARCH ENGINE V1 */
+const RESEARCH_CFG={
+  rr:2,
+  spread:0,
+  slippage:0,
+  commissionPct:CFG.comm
+};
+
+function researchPlan(a,c){
+  if(!a||!a.dir)return null;
+
+  const entry=a.close;
+  const sl=a.dir==="LONG"
+    ?a.lo-a.a[a.i]*0.30
+    :a.hi+a.a[a.i]*0.30;
+
+  const risk=Math.abs(entry-sl);
+  if(!Number.isFinite(risk)||risk<=0||risk/entry<0.001)return null;
+
+  const rr=RESEARCH_CFG.rr;
+  const tp=a.dir==="LONG"
+    ?entry+risk*rr
+    :entry-risk*rr;
+
+  return {
+    dir:a.dir,
+    entry,
+    sl,
+    tp,
+    risk,
+    score:a.score,
+    regime:a.regime,
+    time:c[a.i]?.t??Date.now()
+  };
+}
+
+function researchNetR(pos,exit){
+  if(!pos||!Number.isFinite(exit)||!Number.isFinite(pos.risk)||pos.risk<=0)return 0;
+  const move=pos.dir==="LONG"?exit-pos.entry:pos.entry-exit;
+  const grossR=move/pos.risk;
+  const commission=((Math.abs(pos.entry)+Math.abs(exit))*(RESEARCH_CFG.commissionPct/100));
+  const spread=Math.max(0,Number(RESEARCH_CFG.spread)||0);
+  const slippage=Math.max(0,Number(RESEARCH_CFG.slippage)||0);
+  const friction=commission+spread+(slippage*2);
+  const netMove=move-friction;
+  return netMove/pos.risk;
+}
+
+function runResearch(c){
+  if(!Array.isArray(c)||c.length<220)return null;
+
+  const trades=[];
+  let pos=null;
+
+  for(let i=200;i<c.length-1;i++){
+
+    if(pos){
+      const bar=c[i];
+
+      const hitSL=pos.dir==="LONG"
+        ?bar.l<=pos.sl
+        :bar.h>=pos.sl;
+
+      const hitTP=pos.dir==="LONG"
+        ?bar.h>=pos.tp
+        :bar.l<=pos.tp;
+
+      let exit=null;
+      let reason=null;
+
+      if(hitSL){
+        exit=pos.sl;
+        reason="SL";
+      }else if(hitTP){
+        exit=pos.tp;
+        reason="TP";
+      }
+
+      if(Number.isFinite(exit)){
+        const r=researchNetR(pos,exit);
+
+        trades.push({
+          entry:pos.entry,
+          exit,
+          dir:pos.dir,
+          r,
+          result:r>0?"WIN":r<0?"LOSS":"BE",
+          reason,
+          score:pos.score,
+          regime:pos.regime,
+          entryTime:pos.time,
+          exitTime:bar.t
+        });
+
+        pos=null;
+      }
+
+      continue;
+    }
+
+    const slice=c.slice(0,i+1);
+    const a=analyze(slice);
+    const plan=researchPlan(a,slice);
+
+    if(plan)pos=plan;
+  }
+
+  if(pos){
+    const bar=c[c.length-1];
+    const exit=bar.c;
+    const r=researchNetR(pos,exit);
+
+    trades.push({
+      entry:pos.entry,
+      exit,
+      dir:pos.dir,
+      r,
+      result:r>0?"WIN":r<0?"LOSS":"BE",
+      reason:"END",
+      score:pos.score,
+      regime:pos.regime,
+      entryTime:pos.time,
+      exitTime:bar.t
+    });
+  }
+
+  if(!trades.length){
+    return {
+      trades:[],
+      count:0,
+      wins:0,
+      losses:0,
+      be:0,
+      winRate:0,
+      expectancy:0,
+      profitFactor:null,
+      maxDrawdown:0
+    };
+  }
+
+  const wins=trades.filter(t=>t.r>0);
+  const losses=trades.filter(t=>t.r<0);
+
+  const grossWin=wins.reduce((n,t)=>n+t.r,0);
+  const grossLoss=Math.abs(losses.reduce((n,t)=>n+t.r,0));
+
+  let equity=0;
+  let peak=0;
+  let maxDrawdown=0;
+
+  for(const t of trades){
+    equity+=t.r;
+    peak=Math.max(peak,equity);
+    maxDrawdown=Math.max(maxDrawdown,peak-equity);
+  }
+
+  return {
+    trades,
+    count:trades.length,
+    wins:wins.length,
+    losses:losses.length,
+    be:trades.length-wins.length-losses.length,
+    winRate:wins.length/trades.length,
+    expectancy:trades.reduce((n,t)=>n+t.r,0)/trades.length,
+    profitFactor:grossLoss>0?grossWin/grossLoss:null,
+    maxDrawdown
+  };
+}
+
+/* VANTA HISTORICAL RESEARCH LOADER V1 */
+async function fetchResearchHistory(sym,tf="15m",bars=2000){
+  if(!isCrypto(sym))return[];
+
+  const out=[];
+  const intervalMs=ivl(tf);
+  let end=Date.now();
+
+  while(out.length<bars){
+    const limit=Math.min(1000,bars-out.length);
+    const url="https://api.binance.com/api/v3/klines?symbol="+sym+
+      "&interval="+tf+"&limit="+limit+"&endTime="+end;
+
+    const r=await fetchWithTimeout(url,{},10000);
+    if(!r.ok)throw new Error("Research Binance "+r.status);
+
+    const rows=await r.json();
+    if(!rows.length)break;
+
+    for(const k of rows){
+      const t=+k[0];
+      const closeTime=+k[6];
+
+      if(closeTime<Date.now()-1000){
+        out.push({
+          t,
+          o:+k[1],
+          h:+k[2],
+          l:+k[3],
+          c:+k[4],
+          v:+k[5]
+        });
+      }
+    }
+
+    const firstTime=+rows[0][0];
+    if(!Number.isFinite(firstTime)||rows.length<limit)break;
+
+    end=firstTime-intervalMs;
+  }
+
+  const seen=new Set();
+  return out
+    .sort((a,b)=>a.t-b.t)
+    .filter(x=>!seen.has(x.t)&&seen.add(x.t))
+    .slice(-bars);
+}
 
 function renderQuant(){if(S.view!=="quant")return;const a=S.an;let html='';if(a){const d=a.decomp;html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px"><div class="liquid-cell"><div class="liquid-label">Trend</div><div class="liquid-value">'+d.trend+'/30</div><div class="liquid-sub">'+a.regime+'</div></div><div class="liquid-cell"><div class="liquid-label">Momentum</div><div class="liquid-value">'+d.mom+'/25</div><div class="liquid-sub">RSI '+fmt2(a.r[a.i])+'</div></div><div class="liquid-cell"><div class="liquid-label">Structure</div><div class="liquid-value">'+d.struct+'/25</div><div class="liquid-sub">'+(a.struct?a.struct.bos:"—")+'</div></div><div class="liquid-cell"><div class="liquid-label">Vol+OB</div><div class="liquid-value">'+d.volOb+'/20</div><div class="liquid-sub">'+(a.vol.ok?a.vol.ratio.toFixed(2)+"×":"N/A")+'</div></div><div class="liquid-cell"><div class="liquid-label">Long</div><div class="liquid-value">'+a.ls+'</div></div><div class="liquid-cell"><div class="liquid-label">Short</div><div class="liquid-value">'+a.ss+'</div></div></div><div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.15em;font-weight:700;margin-bottom:12px">Market State</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px"><div class="liquid-cell"><div class="liquid-label">Regime</div><div class="liquid-value">'+a.regime+'</div></div><div class="liquid-cell"><div class="liquid-label">ADX</div><div class="liquid-value">'+fmt2(a.d.adx[a.i])+'</div></div><div class="liquid-cell"><div class="liquid-label">ATR %</div><div class="liquid-value">'+a.atp.toFixed(3)+'%</div></div><div class="liquid-cell"><div class="liquid-label">RSI</div><div class="liquid-value">'+fmt2(a.r[a.i])+'</div></div><div class="liquid-cell"><div class="liquid-label">MACD</div><div class="liquid-value">'+(a.m.h[a.i]?a.m.h[a.i].toFixed(4):"—")+'</div></div><div class="liquid-cell"><div class="liquid-label">BB</div><div class="liquid-value">'+a.bbSqueeze+'</div></div></div>';}else{html+='<div style="color:var(--text-faint);text-align:center;padding:40px">No data. Connect to initialize.</div>';}
 const ex=execState(a);
@@ -1274,6 +1495,15 @@ document.addEventListener("mousemove",e=>{
   bgMouseY=e.clientY/window.innerHeight;
 },{passive:true});
 
+function dismissVantaTransition(){
+  const transition=document.getElementById("vanta-transition");
+  if(!transition)return;
+  transition.classList.add("done");
+  setTimeout(()=>{
+    transition.style.display="none";
+  },950);
+}
+
 function dismissIntro(){
   const splash=document.getElementById("intro-splash");
   if(!splash)return;
@@ -1514,7 +1744,8 @@ function init(){
     console.error("INIT ERROR:",e);
     renderAll();
   }
-  setTimeout(dismissIntro,5000);
+  setTimeout(dismissVantaTransition,2400);
+setTimeout(dismissIntro,5000);
   setInterval(()=>{
     S.market=classify();
     if(S.pos){
